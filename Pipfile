@@ -9,6 +9,7 @@ flask-sqlalchemy = "*"
 flask-migrate = "*"
 importlib-metadata = "*"
 importlib-resources = "*"
+flask-restful = "*"
 
 [dev-packages]
 

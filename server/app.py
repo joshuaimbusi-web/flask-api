@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify
-from datetime import date
-from models import db, Mentor, Student, Cohort
-from sqlalchemy import func
+from flask import Flask, request
+from flask_restful import Api, Resource
+from models import db, Mentor
+
 
 def create_app():
     app = Flask(__name__)
@@ -11,101 +11,83 @@ def create_app():
 
     db.init_app(app)
 
-    @app.route("/mentors", methods=["POST"])
-    def create_mentor():
-        data = request.get_json()
+    api = Api(app)
 
-        mentor = Mentor(
-            name=data["name"],
-            email=data["email"]
-        )
+    # ---------- Resources ----------
 
-        db.session.add(mentor)
-        db.session.commit()
+    class MentorListResource(Resource):
+        def get(self):
+            mentors = Mentor.query.all()
+            return [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "email": m.email
+                }
+                for m in mentors
+            ], 200
 
-        return jsonify({
-            "id": mentor.id,
-            "name": mentor.name,
-            "email": mentor.email
-        }), 201
+        def post(self):
+            data = request.get_json()
 
-    @app.route("/cohorts", methods=["POST"])
-    def create_cohort():
-        data = request.get_json()
-
-        cohort = Cohort(
-            name=data["name"],
-            start_date=date.fromisoformat(data["start_date"]),
-            end_date=date.fromisoformat(data["end_date"])
-        )
-
-        db.session.add(cohort)
-        db.session.commit()
-
-        return jsonify({
-            "id": cohort.id,
-            "name": cohort.name
-        }), 201
-
-    @app.route("/students", methods=["POST"])
-    def enroll_student():
-        data = request.get_json()
-
-        student = Student(
-            name=data["name"],
-            mentor_id=data["mentor_id"],
-            cohort_id=data["cohort_id"]
-        )
-
-        db.session.add(student)
-        db.session.commit()
-
-        return jsonify({
-            "id": student.id,
-            "name": student.name,
-            "mentor_id": student.mentor_id,
-            "cohort_id": student.cohort_id
-        }), 201
-
-    @app.route("/students/<int:student_id>/defer", methods=["PATCH"])
-    def defer_student(student_id):
-        data = request.get_json()
-        student = Student.query.get_or_404(student_id)
-
-        student.cohort_id = data["new_cohort_id"]
-        db.session.commit()
-
-        return jsonify({
-            "message": "Student deferred successfully",
-            "student_id": student.id,
-            "new_cohort_id": student.cohort_id
-        })
-
-    @app.route("/mentors/top-5", methods=["GET"])
-    def top_5_mentors():
-        results = (
-            db.session.query(
-                Mentor.id,
-                Mentor.name,
-                func.count(Student.id).label("total_students")
+            mentor = Mentor(
+                name=data["name"],
+                email=data["email"]
             )
-            .join(Student)
-            .group_by(Mentor.id)
-            .order_by(func.count(Student.id).desc())
-            .limit(5)
-            .all()
-        )
 
-        return jsonify([
-            {
-                "mentor_id": r.id,
-                "mentor_name": r.name,
-                "total_students": r.total_students
-            }
-            for r in results
-        ])
+            db.session.add(mentor)
+            db.session.commit()
+
+            return {
+                "id": mentor.id,
+                "name": mentor.name,
+                "email": mentor.email
+            }, 201
+
+    class MentorResource(Resource):
+        def get(self, mentor_id):
+            mentor = Mentor.query.get_or_404(mentor_id)
+            return {
+                "id": mentor.id,
+                "name": mentor.name,
+                "email": mentor.email
+            }, 200
+
+        def patch(self, mentor_id):
+            mentor = Mentor.query.get_or_404(mentor_id)
+            data = request.get_json()
+
+            if "name" in data:
+                mentor.name = data["name"]
+            if "email" in data:
+                mentor.email = data["email"]
+
+            db.session.commit()
+
+            return {
+                "message": "Mentor updated successfully",
+                "id": mentor.id,
+                "name": mentor.name,
+                "email": mentor.email
+            }, 200
+
+        def delete(self, mentor_id):
+            mentor = Mentor.query.get_or_404(mentor_id)
+
+            db.session.delete(mentor)
+            db.session.commit()
+
+            return {
+                "message": "Mentor deleted successfully"
+            }, 204
+
+    # ---------- Routes ----------
+
+    api.add_resource(MentorListResource, "/mentors")
+    api.add_resource(MentorResource, "/mentors/<int:mentor_id>")
 
     return app
+
 
 app = create_app()
 
